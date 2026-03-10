@@ -58,9 +58,9 @@ LOCATION                = "Paris, France"   # ville pour les recherches météo
 TIMEZONE                = "Europe/Paris"    # fuseau horaire (IANA, ex: "America/New_York", "Asia/Tokyo")
 
 # Alertes Telegram (recommandé — plus simple que l'email)
-TELEGRAM_BOT_TOKEN      = "REDACTED_TELEGRAM_TOKEN"
-TELEGRAM_CHAT_ID        = "REDACTED_CHAT_ID"
-TELEGRAM_ENABLED        = True
+TELEGRAM_BOT_TOKEN      = ""   # configurer dans config_local.py sur le Pi
+TELEGRAM_CHAT_ID        = ""   # configurer dans config_local.py sur le Pi
+TELEGRAM_ENABLED        = False
 
 # Alertes email (alternatif)
 ALERT_EMAIL_TO          = ""             # adresse de destination des alertes email
