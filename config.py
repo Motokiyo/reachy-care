@@ -32,7 +32,7 @@ FALL_DETECTION_CONF     = 0.50
 FALL_RATIO_THRESHOLD    = 0.15
 FALL_SUSTAINED_SEC      = 3.0
 FALL_INTERVAL_SEC       = 0.5
-FALL_GHOST_TRIGGER_SEC  = 5.0   # Algo B : secondes sans squelette avant alerte (5.0 = moins de faux positifs sur sorties de pièce)
+FALL_GHOST_TRIGGER_SEC  = 20.0  # Algo B : secondes sans squelette avant alerte (20s = tolérant pour déplacements normaux dans la maison)
 FALL_GHOST_RESET_SEC    = 45.0  # Algo B : secondes sans squelette → personne sortie (reset)
 
 # Module 1E — Sound Detection (YAMNet TFLite)
