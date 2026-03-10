@@ -8,3 +8,7 @@ mediapipe>=0.10.0
 
 # Système (apt, pas pip) :
 # sudo apt install stockfish espeak-ng
+
+# Sound detection (YAMNet TFLite) :
+# pip install tflite-runtime  (ou tensorflow-lite sur Pi)
+# pip install pyaudio          (déjà installé via openwakeword)

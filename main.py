@@ -33,6 +33,7 @@ from modules.chess_detector import ChessDetector
 from modules.chess_engine import ChessEngine
 from modules.fall_detector import FallDetector
 from modules.memory_manager import MemoryManager
+from modules.sound_detector import SoundDetector
 from modules.mode_manager import ModeManager, MODE_ECHECS, MODE_HISTOIRE, MODE_PRO, MODE_NORMAL
 from modules.tts import TTSEngine
 from modules.wake_word import WakeWordDetector
@@ -107,6 +108,7 @@ class ReachyCare:
         self.memory = None
         self.mode_manager: ModeManager | None = None
         self.wake_word: WakeWordDetector | None = None
+        self.sound_det: SoundDetector | None = None
 
         # État du module chess
         self._chess_detected_frames = 0
@@ -260,6 +262,17 @@ class ReachyCare:
         except Exception as exc:
             logger.warning("FallDetector désactivé : %s", exc)
 
+        if config.SOUND_DETECTION_ENABLED:
+            try:
+                self.sound_det = SoundDetector(
+                    model_path=str(config.SOUND_MODEL_PATH),
+                    on_impact=self._handle_sound_impact,
+                    threshold=config.SOUND_IMPACT_THRESHOLD,
+                )
+                logger.info("SoundDetector initialisé (disponible=%s).", self.sound_det.available)
+            except Exception as exc:
+                logger.warning("SoundDetector désactivé : %s", exc)
+
         if config.WAKE_WORD_ENABLED:
             try:
                 self.wake_word = WakeWordDetector(
@@ -302,7 +315,9 @@ class ReachyCare:
                 # Salutation initiale
                 self.tts.say("Bonjour, je suis Reachy. Je suis là.", blocking=True)
 
-                # Démarrer le wake word
+                # Démarrer la détection sonore et le wake word
+                if self.sound_det:
+                    self.sound_det.start()
                 if self.wake_word:
                     self.wake_word.start()
 
@@ -368,6 +383,26 @@ class ReachyCare:
                         logger.info("Personne reconnue : %s (session #%d)", name, mem["sessions_count"])
 
                 profile = mem.get("profile") or None
+
+                # Contexte mémoire enrichi : 3 dernières sessions + 15 faits récents
+                sessions = mem.get("sessions", [])[-3:]
+                facts = mem.get("facts", [])[-15:]
+                if sessions or facts:
+                    sessions_txt = "\n".join(
+                        f"- {s.get('date', '?')} : {s.get('summary', '')}" for s in sessions
+                    ) or "Première rencontre."
+                    facts_txt = "\n".join(
+                        f"- [{f.get('category', '?')}] {f.get('fact', '')}" for f in facts
+                    ) or "Aucun fait enregistré."
+                    meds = ", ".join(profile.get("medications", [])) if profile else ""
+                    contact = profile.get("emergency_contact", "") if profile else ""
+                    memory_summary = (
+                        f"HISTORIQUE RÉCENT ({name}) :\n{sessions_txt}\n\n"
+                        f"FAITS CONNUS :\n{facts_txt}\n\n"
+                        f"PROFIL :\nMédicaments : {meds or 'non renseigné'}\n"
+                        f"Contact urgence : {contact or 'non renseigné'}"
+                    )
+
                 bridge.set_context(person=name, memory_summary=memory_summary, profile=profile)
                 self.mini.goto_target(antennas=config.ANTENNA_HAPPY, duration=0.5)
                 self._last_greeted = name
@@ -628,6 +663,30 @@ class ReachyCare:
                 bridge.trigger_check_in(self._last_greeted)
         except Exception as exc:
             logger.debug("_handle_fall: %s", exc)
+
+    def _handle_sound_impact(self, label: str, score: float) -> None:
+        """Appelé par SoundDetector quand un son d'impact (chute possible) est détecté."""
+        logger.warning("Impact sonore détecté : %s (score=%.2f)", label, score)
+        self._session_events.append(f"Impact sonore : {label}")
+
+        # Fusion audio + vidéo : squelette absent depuis > 2s → alerte directe, haute certitude
+        if (
+            self.fall_det
+            and self.fall_det._skeleton_absent_since is not None
+            and time.monotonic() - self.fall_det._skeleton_absent_since > 2.0
+            and not self._fall_checkin_active
+        ):
+            logger.warning("Fusion audio+vidéo : impact sonore + squelette absent → alerte directe")
+            self._escalate_fall_alert()
+            return
+
+        # Impact seul → check-in prudent (peut être un objet qui tombe)
+        if not self._fall_checkin_active:
+            self._fall_checkin_active = True
+            self._fall_checkin_time = time.monotonic()
+            if self.mini:
+                self.mini.goto_target(antennas=config.ANTENNA_ALERT, duration=0.3)
+            bridge.trigger_check_in(self._last_greeted)
 
     def _escalate_fall_alert(self) -> None:
         """Escalade l'alerte chute après un check-in négatif ou sans réponse."""
@@ -900,7 +959,7 @@ class ReachyCare:
         self._stop = True
 
     def _summarize_session(self) -> None:
-        """Génère et sauvegarde un résumé de session pour chaque personne vue."""
+        """Génère et sauvegarde résumé + faits structurés pour chaque personne vue."""
         if not self._seen_persons or self.memory is None:
             return
 
@@ -909,26 +968,30 @@ class ReachyCare:
             logger.warning("Résumé session ignoré : OPENAI_API_KEY introuvable.")
             return
 
+        from datetime import date
+        today = date.today().isoformat()
         events_text = "\n".join(self._session_events) if self._session_events else "Aucun événement notable."
 
         for name, mem in self._seen_persons.items():
+            # --- Appel 1 : résumé narratif ---
             existing = mem.get("conversation_summary", "")
-            prompt = (
+            prompt_summary = (
                 f"Tu gères la mémoire d'un robot compagnon pour personnes âgées.\n"
                 f"Personne : {name}\n"
                 f"Résumé existant : {existing or 'Aucun'}\n"
                 f"Événements de cette session :\n{events_text}\n\n"
-                "Génère un résumé concis et utile (3 phrases max) des interactions connues "
-                "avec cette personne, intégrant les nouvelles informations. "
+                "Génère un résumé concis (3 phrases max) de cette session. "
+                "Mentionne les activités faites, l'ambiance générale, rien de plus. "
                 "Réponds uniquement avec le résumé, sans introduction."
             )
+            summary = ""
             try:
                 resp = requests.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                     json={
                         "model": "gpt-4o-mini",
-                        "messages": [{"role": "user", "content": prompt}],
+                        "messages": [{"role": "user", "content": prompt_summary}],
                         "max_tokens": 150,
                         "temperature": 0.3,
                     },
@@ -936,10 +999,55 @@ class ReachyCare:
                 )
                 resp.raise_for_status()
                 summary = resp.json()["choices"][0]["message"]["content"].strip()
-                self.memory.update_summary(name, summary)
-                logger.info("Résumé session sauvegardé pour %s.", name)
+                logger.info("Résumé session généré pour %s.", name)
             except Exception as exc:
                 logger.warning("Résumé session échoué pour %s : %s", name, exc)
+                summary = events_text[:200] if events_text else ""
+
+            # Sauvegarde dans l'historique roulant
+            self.memory.add_session(name, {
+                "date": today,
+                "summary": summary,
+                "activities": [e for e in self._session_events if "echecs" in e.lower() or "histoire" in e.lower()],
+            })
+
+            # --- Appel 2 : extraction de faits structurés ---
+            if events_text and events_text != "Aucun événement notable.":
+                prompt_facts = (
+                    f"Événements d'une session avec {name} :\n{events_text}\n\n"
+                    "Extrait les faits importants sous forme de liste JSON. "
+                    "Chaque fait est un objet avec les champs 'fact' (string) et 'category' "
+                    "(une parmi : santé, famille, préférences, habitudes, activités). "
+                    "Exemple : [{\"fact\": \"A mal au genou droit\", \"category\": \"santé\"}]. "
+                    "Si aucun fait notable, réponds avec []. "
+                    "Réponds UNIQUEMENT avec le JSON valide, sans explication."
+                )
+                try:
+                    resp2 = requests.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                        json={
+                            "model": "gpt-4o-mini",
+                            "messages": [{"role": "user", "content": prompt_facts}],
+                            "max_tokens": 300,
+                            "temperature": 0.1,
+                        },
+                        timeout=15,
+                    )
+                    resp2.raise_for_status()
+                    import json as _json
+                    raw = resp2.json()["choices"][0]["message"]["content"].strip()
+                    facts = _json.loads(raw)
+                    if isinstance(facts, list) and facts:
+                        # Ajoute la date à chaque fait
+                        for f in facts:
+                            if isinstance(f, dict):
+                                f.setdefault("date", today)
+                                f.setdefault("source", "session")
+                        self.memory.add_facts(name, facts)
+                        logger.info("Faits extraits pour %s : %d faits.", name, len(facts))
+                except Exception as exc:
+                    logger.warning("Extraction faits échouée pour %s : %s", name, exc)
 
     def _read_openai_key_from_env_file(self) -> str | None:
         """Lit OPENAI_API_KEY depuis le .env de reachy_mini_conversation_app."""
@@ -963,6 +1071,13 @@ class ReachyCare:
         logger.info("Arrêt de Reachy Care …")
 
         self._summarize_session()
+
+        try:
+            if self.sound_det is not None:
+                self.sound_det.stop()
+                logger.info("SoundDetector arrêté.")
+        except Exception as exc:
+            logger.debug("sound_det.stop(): %s", exc)
 
         try:
             if self.wake_word is not None:

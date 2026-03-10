@@ -32,8 +32,13 @@ FALL_DETECTION_CONF     = 0.50
 FALL_RATIO_THRESHOLD    = 0.15
 FALL_SUSTAINED_SEC      = 3.0
 FALL_INTERVAL_SEC       = 0.5
-FALL_GHOST_TRIGGER_SEC  = 2.5   # Algo B : secondes sans squelette avant alerte (caméra horizontale)
+FALL_GHOST_TRIGGER_SEC  = 5.0   # Algo B : secondes sans squelette avant alerte (5.0 = moins de faux positifs sur sorties de pièce)
 FALL_GHOST_RESET_SEC    = 45.0  # Algo B : secondes sans squelette → personne sortie (reset)
+
+# Module 1E — Sound Detection (YAMNet TFLite)
+SOUND_DETECTION_ENABLED  = True
+SOUND_MODEL_PATH         = MODELS_DIR / "yamnet.tflite"
+SOUND_IMPACT_THRESHOLD   = 0.30    # score min pour déclencher suspicion de chute
 
 # Boucle principale
 FRAME_INTERVAL_SEC      = 0.1     # 10 Hz

@@ -17,6 +17,8 @@ _SCHEMA = {
     "last_seen": "",
     "sessions_count": 0,
     "conversation_summary": "",
+    "sessions": [],               # 10 dernières sessions résumées
+    "facts": [],                  # faits structurés extraits
     "preferences": {},
     "health_signals": [],
     "family": {},
@@ -101,3 +103,21 @@ class MemoryManager:
 
     def list_persons(self) -> list[str]:
         return [p.stem.replace("_memory", "") for p in self._dir.glob("*_memory.json")]
+
+    def add_session(self, name: str, session: dict, max_sessions: int = 10) -> None:
+        """Ajoute une session à l'historique (tableau tournant). Rétro-compatible avec conversation_summary."""
+        data = self.load(name)
+        sessions = data.get("sessions", [])
+        sessions.append(session)
+        data["sessions"] = sessions[-max_sessions:]
+        data["conversation_summary"] = session.get("summary", "")
+        self.save(data)
+
+    def add_facts(self, name: str, facts: list[dict]) -> None:
+        """Ajoute des faits structurés, sans doublons exacts sur le champ 'fact'."""
+        data = self.load(name)
+        existing = data.get("facts", [])
+        existing_texts = {f["fact"] for f in existing if isinstance(f, dict) and "fact" in f}
+        new_facts = [f for f in facts if isinstance(f, dict) and f.get("fact") not in existing_texts]
+        data["facts"] = existing + new_facts
+        self.save(data)
