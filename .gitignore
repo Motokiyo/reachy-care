@@ -34,12 +34,25 @@ models/
 *.tmp
 *.bak
 
-# Docs internes Claude (mémoire, briefs session)
+# Docs internes — tout ce qui n'est pas le code de l'app
+.claude/
 BRIEF_COWORK_*.md
 POUR_DEMAIN.md
 RAPPORT_SESSION_*.md
 CORRECTIONS_DEV_*.md
+REPRISE_*.md
+DEPLOY_*.md
+TESTS_SERVEUR_*.md
+RAPPORT_SERVEUR_*.md
+CONTEXT.md
 INSTRUCTIONS_CLAUDE_CODE.md
+QUESTIONS-COWORK.md
+CONFIGURATION.md
+ETAT_AVANCEMENT.md
+RESULTATS_TESTS.md
+PLAN_DEVELOPPEMENT_*.docx
+docs/
+config_local.py
 
 # IDE
 .idea/
