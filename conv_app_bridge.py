@@ -8,8 +8,11 @@ que le conv_app démarre sur localhost:8766 au moment de la connexion.
 import json
 import logging
 import threading
-import urllib.request
 import urllib.error
+import urllib.request
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +45,12 @@ class ConvAppBridge:
         memory_summary=None,
         profile=None,
     ) -> None:
-        from datetime import datetime as _dt
-        from zoneinfo import ZoneInfo
         try:
             import config as _cfg
             tz = ZoneInfo(getattr(_cfg, "TIMEZONE", "Europe/Paris"))
         except Exception:
             tz = None
-        now_str = _dt.now(tz).strftime("%A %d %B %Y à %Hh%M")
+        now_str = datetime.now(tz).strftime("%A %d %B %Y à %Hh%M")
 
         if person:
             memory_ctx = f" Contexte mémorisé : {memory_summary}." if memory_summary else ""
@@ -294,8 +295,6 @@ class ConvAppBridge:
         À appeler périodiquement pour que le LLM ne perde pas le fil
         quand la fenêtre de contexte OpenAI Realtime se remplit.
         """
-        import json
-        from pathlib import Path
         memory_file = Path("/tmp/reachy_session_memory.json")
         try:
             data = json.loads(memory_file.read_text(encoding="utf-8"))

@@ -7,6 +7,7 @@ Retourne un extrait de texte brut pour le mode lecture.
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import requests
@@ -97,7 +98,6 @@ class GutenbergFetch(Tool):
                 if not wikitext:
                     return None
                 # Nettoyer le wikitext basiquement (supprimer les balises wiki)
-                import re
                 text = re.sub(r"\{\{[^}]*\}\}", "", wikitext)   # templates
                 text = re.sub(r"\[\[(?:[^|\]]*\|)?([^\]]+)\]\]", r"\1", text)  # liens wiki
                 text = re.sub(r"<[^>]+>", "", text)             # balises HTML

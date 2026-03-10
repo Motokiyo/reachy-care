@@ -148,7 +148,6 @@ class SoundDetector:
             while not self._stop_event.is_set():
                 try:
                     raw = stream.read(_HOP_SAMPLES, exception_on_overflow=False)
-                    import numpy as np
                     chunk = np.frombuffer(raw, dtype=np.float32)
 
                     # Détection de cri par RMS — indépendant de YAMNet

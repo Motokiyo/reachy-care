@@ -13,18 +13,21 @@ import logging
 import logging.handlers
 import os
 import signal
+import smtplib
 import sys
+import threading
 import time
-
-import chess
+from datetime import date, datetime
+from email.message import EmailMessage
 
 sys.path.insert(0, "/home/pollen/reachy_care")
 
+import chess
+import numpy as np
 import requests
 
 from reachy_mini import ReachyMini
 from reachy_mini.utils import create_head_pose
-import numpy as np
 
 import config
 from modules.face_recognizer import FaceRecognizer
@@ -444,7 +447,6 @@ class ReachyCare:
         if self.chess_det is None or self.chess_eng is None:
             return
         try:
-            import chess as _chess
             grid = self.chess_det.frame_to_grid(frame, flip=self._chess_orientation_flip)
 
             # --- Pas d'échiquier visible ---
@@ -546,8 +548,8 @@ class ReachyCare:
                     self._chess_noise_count = 0
                     self._chess_last_stable_fen = stable_fen
                     try:
-                        turn_char = 'w' if self._chess_board.turn == _chess.WHITE else 'b'
-                        self._chess_board = _chess.Board(f"{stable_fen} {turn_char} - - 0 1")
+                        turn_char = 'w' if self._chess_board.turn == chess.WHITE else 'b'
+                        self._chess_board = chess.Board(f"{stable_fen} {turn_char} - - 0 1")
                     except Exception:
                         pass
                 return
@@ -577,9 +579,8 @@ class ReachyCare:
 
     def _start_chess_game(self) -> None:
         """Initialise une nouvelle partie et bascule en mode échecs."""
-        import chess as _chess
         self._reset_chess_state()
-        self._chess_reachy_color = _chess.BLACK
+        self._chess_reachy_color = chess.BLACK
         self._chess_game_state = "human_turn"
         # Baisser la tête pour voir l'échiquier sur la table
         if self.mini:
@@ -603,14 +604,13 @@ class ReachyCare:
 
     def _play_reachy_move(self) -> None:
         """Calcule et annonce le coup de Reachy, puis attend la confirmation."""
-        import chess as _chess
         move = self.chess_eng.best_move(self._chess_board)
         if move is None:
             self._chess_game_state = "human_turn"
             return
 
-        from_sq = _chess.square_name(move.from_square)
-        to_sq   = _chess.square_name(move.to_square)
+        from_sq = chess.square_name(move.from_square)
+        to_sq   = chess.square_name(move.to_square)
         try:
             move_san = self._chess_board.san(move)
         except Exception:
@@ -639,7 +639,6 @@ class ReachyCare:
 
     def _check_game_over(self) -> bool:
         """Vérifie fin de partie. Retourne True si terminée."""
-        import chess as _chess
         board = self._chess_board
         if board.is_checkmate():
             winner = "Reachy" if board.turn != self._chess_reachy_color else "le joueur"
@@ -670,7 +669,6 @@ class ReachyCare:
 
     def _reset_chess_state(self) -> None:
         """Remet à zéro l'état du module chess pour une nouvelle partie."""
-        import chess as _chess
         self._chess_reachy_color = None
         self._chess_game_state = "idle"
         # Relever la tête en position normale
@@ -680,7 +678,7 @@ class ReachyCare:
                 duration=1.5,
             )
         self._chess_expected_fen = None
-        self._chess_board = _chess.Board()
+        self._chess_board = chess.Board()
         self._chess_fen_candidate = None
         self._chess_fen_candidate_count = 0
         self._chess_last_stable_fen = None
@@ -794,9 +792,6 @@ class ReachyCare:
             logger.warning("Alerte Telegram : BOT_TOKEN ou CHAT_ID non configurés.")
             return
 
-        import threading
-        from datetime import datetime
-
         who = person_name.capitalize() if person_name else "une personne inconnue"
         now = datetime.now().strftime("%d/%m/%Y à %Hh%M")
         text = (
@@ -829,11 +824,6 @@ class ReachyCare:
         if not config.ALERT_EMAIL_FROM or not config.ALERT_EMAIL_PASSWORD:
             logger.warning("Alerte email : identifiants non configurés (ALERT_EMAIL_FROM / ALERT_EMAIL_PASSWORD).")
             return
-
-        import smtplib
-        import threading
-        from email.message import EmailMessage
-        from datetime import datetime
 
         who = person_name.capitalize() if person_name else "une personne inconnue"
         now = datetime.now().strftime("%d/%m/%Y à %Hh%M")
@@ -1056,7 +1046,6 @@ class ReachyCare:
             logger.warning("Résumé session ignoré : OPENAI_API_KEY introuvable.")
             return
 
-        from datetime import date
         today = date.today().isoformat()
         events_text = "\n".join(self._session_events) if self._session_events else "Aucun événement notable."
 
@@ -1123,9 +1112,8 @@ class ReachyCare:
                         timeout=15,
                     )
                     resp2.raise_for_status()
-                    import json as _json
                     raw = resp2.json()["choices"][0]["message"]["content"].strip()
-                    facts = _json.loads(raw)
+                    facts = json.loads(raw)
                     if isinstance(facts, list) and facts:
                         # Ajoute la date à chaque fait
                         for f in facts:
