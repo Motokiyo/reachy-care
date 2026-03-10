@@ -1,0 +1,10 @@
+# Librairies DÉJÀ dans /venvs/apps_venv — NE PAS réinstaller :
+# opencv-python>=4.12, numpy>=2.2, onnxruntime>=1.24, insightface>=0.7, scikit-learn>=1.8
+
+# À installer si absent (pip install) :
+ultralytics>=8.3.0
+python-chess>=1.10.0
+mediapipe>=0.10.0
+
+# Système (apt, pas pip) :
+# sudo apt install stockfish espeak-ng

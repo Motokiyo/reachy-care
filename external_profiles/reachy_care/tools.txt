@@ -1,0 +1,14 @@
+dance
+stop_dance
+play_emotion
+stop_emotion
+camera
+do_nothing
+head_tracking
+move_head
+search
+switch_mode
+gutenberg
+enroll_face
+report_wellbeing
+session_memory

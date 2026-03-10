@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Environnements
+.env
+.venv/
+venv/
+
+# Données persistantes Pi (ne pas versionner)
+known_faces/
+logs/
+models/
+
+# Documents Office
+*.docx
+*.xlsx
+*.pdf
+
+# Photos de test
+*.jpg
+*.jpeg
+*.png
+*.bmp
+
+# Fichiers temporaires
+/tmp/
+*.tmp
+*.bak
+
+# Docs internes Claude (mémoire, briefs session)
+BRIEF_COWORK_*.md
+POUR_DEMAIN.md
+RAPPORT_SESSION_*.md
+CORRECTIONS_DEV_*.md
+INSTRUCTIONS_CLAUDE_CODE.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
