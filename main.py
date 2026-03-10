@@ -301,6 +301,7 @@ class ReachyCare:
             try:
                 self.wake_word = WakeWordDetector(
                     model_path=config.WAKE_WORD_MODEL_PATH,
+                    tflite_path=config.WAKE_WORD_TFLITE_PATH,
                     on_wake=self._on_wake_word,
                     threshold=config.WAKE_WORD_THRESHOLD,
                     input_device_index=config.WAKE_WORD_DEVICE_INDEX,

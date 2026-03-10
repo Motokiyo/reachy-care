@@ -84,9 +84,9 @@ CHESS_SKILL_LEVEL_INIT         = 3     # niveau Stockfish initial (0=débutant, 
 
 # Wake Word
 WAKE_WORD_ENABLED       = True
-WAKE_WORD_MODEL_PATH    = MODELS_DIR / "hey_reachy.onnx"  # modèle custom ONNX (optionnel)
-WAKE_WORD_FALLBACK      = "hey_jarvis"  # modèle intégré si hey_reachy.onnx absent
-                                        # Autres disponibles : "alexa", "hey_mycroft", "hey_rhasspy"
+WAKE_WORD_MODEL_PATH    = MODELS_DIR / "hey_Reatchy.onnx"  # modèle custom entraîné
+WAKE_WORD_TFLITE_PATH   = MODELS_DIR / "hey_Reatchy.tflite"  # fallback tflite
+WAKE_WORD_FALLBACK      = "hey_jarvis"  # fallback built-in si les deux absents
 WAKE_WORD_THRESHOLD     = 0.5
 WAKE_WORD_DEVICE_INDEX  = None   # None = device par défaut (PulseAudio)
 

@@ -34,8 +34,10 @@ class WakeWordDetector:
         threshold: float = 0.5,
         input_device_index: int | None = None,
         fallback_model: str = "hey_jarvis",
+        tflite_path: str | Path | None = None,
     ) -> None:
         self._model_path = Path(model_path) if model_path else None
+        self._tflite_path = Path(tflite_path) if tflite_path else None
         self._on_wake = on_wake
         self._threshold = threshold
         self._input_device_index = input_device_index
@@ -81,17 +83,38 @@ class WakeWordDetector:
         self.stop()
 
     def _build_model(self):
+        # 1. ONNX custom (hey_Reatchy.onnx)
         if self._model_path and self._model_path.exists():
-            model = self._oww.Model(
-                wakeword_models=[str(self._model_path)],
-                inference_framework="onnx",
+            try:
+                model = self._oww.Model(
+                    wakeword_models=[str(self._model_path)],
+                    inference_framework="onnx",
+                )
+                logger.info("WakeWordDetector : ONNX chargé : %s", self._model_path.name)
+                return model
+            except Exception as exc:
+                logger.warning("WakeWordDetector : ONNX échoué (%s) — essai tflite.", exc)
+
+        # 2. TFLite custom (hey_Reatchy.tflite)
+        if self._tflite_path and self._tflite_path.exists():
+            try:
+                model = self._oww.Model(
+                    wakeword_models=[str(self._tflite_path)],
+                    inference_framework="tflite",
+                )
+                logger.info("WakeWordDetector : TFLite chargé : %s", self._tflite_path.name)
+                return model
+            except Exception as exc:
+                logger.warning("WakeWordDetector : TFLite échoué (%s) — fallback built-in.", exc)
+
+        # 3. Modèle built-in (hey_jarvis, alexa, etc.)
+        if self._model_path:
+            logger.warning(
+                "WakeWordDetector : %s introuvable — fallback %s.",
+                self._model_path.name, self._fallback_model,
             )
-            logger.info("WakeWordDetector : modèle custom chargé : %s", self._model_path)
-        else:
-            if self._model_path:
-                logger.warning("WakeWordDetector : %s introuvable — fallback %s.", self._model_path, self._fallback_model)
-            model = self._oww.Model(wakeword_models=[self._fallback_model], inference_framework="onnx")
-            logger.info("WakeWordDetector : modèle %s chargé.", self._fallback_model)
+        model = self._oww.Model(wakeword_models=[self._fallback_model], inference_framework="onnx")
+        logger.info("WakeWordDetector : modèle built-in '%s' chargé.", self._fallback_model)
         return model
 
     def _run(self) -> None:
