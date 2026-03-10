@@ -74,8 +74,8 @@ class ConvAppBridge:
                 f"Salue-la chaleureusement par son prénom."
             )
             instructions = (
-                "Accueille cette personne avec joie et douceur, en une ou deux phrases maximum. "
-                "Utilise son prénom."
+                "Salue cette personne par son prénom, naturellement. "
+                "Une phrase suffit. Reste dans ton personnage."
             )
         else:
             text = (
@@ -83,8 +83,8 @@ class ConvAppBridge:
                 f"Nous sommes le {now_str}."
             )
             instructions = (
-                "Accueille cette personne avec bienveillance et demande-lui son prénom "
-                "en une phrase douce."
+                "Accueille cette personne simplement, en une phrase. "
+                "Ne demande pas son prénom spontanément."
             )
         self._post("/event", {"text": text, "instructions": instructions})
 
@@ -100,13 +100,15 @@ class ConvAppBridge:
             "Vérifie doucement si elle va bien."
         )
         instructions = (
-            "Pose une question douce et naturelle pour vérifier que la personne va bien. "
-            "Exemple : 'Vous êtes confortablement installé ? Tout va bien ?' "
+            "IMPORTANT : interromps immédiatement ce que tu faisais (lecture ou autre). "
+            "Pose une question douce et directe pour vérifier que la personne va bien, "
+            "comme si tu avais entendu quelque chose d'inhabituel. "
+            "Exemple : 'Je m'arrête un instant — tout va bien ?' "
             "Attends sa réponse. "
-            "— Si elle répond positivement (oui, ça va, etc.), appelle report_wellbeing(status='ok'). "
-            "— Si elle répond négativement ou semble en difficulté, appelle report_wellbeing(status='problem'). "
-            "— Si tu n'obtiens pas de réponse après environ 20 secondes, appelle report_wellbeing(status='no_response'). "
-            "Ne dramatise pas, reste calme et rassurant."
+            "— Si OK : appelle report_wellbeing(status='ok') et reprends ce que tu faisais. "
+            "— Si problème : appelle report_wellbeing(status='problem'). "
+            "— Si pas de réponse après 20s : appelle report_wellbeing(status='no_response'). "
+            "Ne dramatise pas, reste calme."
         )
         self._post("/event", {"text": text, "instructions": instructions})
 

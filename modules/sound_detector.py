@@ -26,6 +26,9 @@ _SAMPLE_RATE = 16000
 _WINDOW_SAMPLES = 15600   # 975ms — taille fenêtre YAMNet (15600 échantillons @ 16kHz)
 _HOP_SAMPLES = 8000       # 500ms entre fenêtres
 
+# Détection de cri par RMS (indépendant de YAMNet — fonctionne pendant lecture Reachy)
+_CRY_RMS_THRESHOLD = 0.15  # RMS > 0.15 sur 500ms = son fort (cri, appel à l'aide)
+
 
 class SoundDetector:
     """Détecteur audio d'impact via YAMNet TFLite.
@@ -47,11 +50,13 @@ class SoundDetector:
         on_impact: Callable[[str, float], None],
         threshold: float = 0.30,
         device_index: Optional[int] = None,
+        on_cry: Optional[Callable[[], None]] = None,
     ) -> None:
         self._model_path = Path(model_path)
         self._on_impact = on_impact
         self._threshold = threshold
         self._device_index = device_index
+        self._on_cry = on_cry
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._interpreter = None
@@ -72,12 +77,15 @@ class SoundDetector:
             import tflite_runtime.interpreter as tflite
         except ImportError:
             try:
-                from tensorflow.lite.python import interpreter as tflite
+                import ai_edge_litert.interpreter as tflite
             except ImportError:
-                logger.warning(
-                    "SoundDetector: tflite_runtime non disponible — détection audio désactivée."
-                )
-                return
+                try:
+                    from tensorflow.lite.python import interpreter as tflite
+                except ImportError:
+                    logger.warning(
+                        "SoundDetector: tflite_runtime non disponible — détection audio désactivée."
+                    )
+                    return
         try:
             self._interpreter = tflite.Interpreter(model_path=str(self._model_path))
             self._interpreter.allocate_tensors()
@@ -142,7 +150,18 @@ class SoundDetector:
                     raw = stream.read(_HOP_SAMPLES, exception_on_overflow=False)
                     import numpy as np
                     chunk = np.frombuffer(raw, dtype=np.float32)
-                    # Fenêtre glissante
+
+                    # Détection de cri par RMS — indépendant de YAMNet
+                    # Fonctionne même quand Reachy parle (conv_app VAD aveugle pendant lecture)
+                    if self._on_cry is not None:
+                        rms = float(np.sqrt(np.mean(chunk ** 2)))
+                        if rms >= _CRY_RMS_THRESHOLD:
+                            try:
+                                self._on_cry()
+                            except Exception as cb_exc:
+                                logger.debug("SoundDetector: on_cry erreur : %s", cb_exc)
+
+                    # Fenêtre glissante pour YAMNet
                     buffer = np.roll(buffer, -len(chunk))
                     buffer[-len(chunk):] = chunk
                     self._infer(buffer)
@@ -168,7 +187,7 @@ class SoundDetector:
             import numpy as np
             inp = self._interpreter.get_input_details()
             out = self._interpreter.get_output_details()
-            self._interpreter.set_tensor(inp[0]["index"], waveform[np.newaxis, :])
+            self._interpreter.set_tensor(inp[0]["index"], waveform)
             self._interpreter.invoke()
             scores = self._interpreter.get_tensor(out[0]["index"])   # shape (N, 521)
             mean_scores = scores.mean(axis=0)

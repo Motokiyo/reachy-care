@@ -135,6 +135,10 @@ class ReachyCare:
         self._fall_checkin_active: bool = False
         self._fall_checkin_time: float = 0.0
         self._pending_impact_time: float | None = None  # timestamp impact sonore en attente de fusion
+        self._last_cry_time: float = 0.0               # cooldown anti-spam détection cri
+
+        # Suivi session OpenAI Realtime (expire à 60min — reconnexion proactive à 55min)
+        self._conv_app_start_time: float = time.monotonic()
 
         # Keepalive bridge — timestamp de la dernière activité envoyée au bridge
         self._last_bridge_activity = time.monotonic()
@@ -284,6 +288,7 @@ class ReachyCare:
                     model_path=str(config.SOUND_MODEL_PATH),
                     on_impact=self._handle_sound_impact,
                     threshold=config.SOUND_IMPACT_THRESHOLD,
+                    on_cry=self._handle_cry,
                 )
                 logger.info("SoundDetector initialisé (disponible=%s).", self.sound_det.available)
             except Exception as exc:
@@ -724,6 +729,24 @@ class ReachyCare:
             self._pending_impact_time = time.monotonic()
             logger.info("Impact sonore mémorisé — surveillance squelette pendant 5s (fusion différée)")
 
+    def _handle_cry(self) -> None:
+        """Détection de cri par RMS — indépendant de la VAD conv_app (half-duplex).
+
+        Appelé par SoundDetector quand RMS > seuil sur 500ms.
+        Interrompt la réponse de Reachy et déclenche un check-in immédiat.
+        Cooldown 5s pour éviter le spam.
+        """
+        now = time.monotonic()
+        if now - self._last_cry_time < 5.0:
+            return
+        if self._fall_checkin_active:
+            return
+        self._last_cry_time = now
+        logger.warning("Cri détecté (RMS) — interruption conv_app + check-in")
+        self._session_events.append("Cri ou son fort détecté (RMS)")
+        bridge._post("/interrupt", {})
+        bridge.trigger_check_in(self._last_greeted)
+
     def _escalate_fall_alert(self) -> None:
         """Escalade l'alerte chute après un check-in négatif ou sans réponse."""
         self._fall_checkin_active = False
@@ -987,8 +1010,17 @@ class ReachyCare:
     # ------------------------------------------------------------------
 
     def _check_conv_app_health(self) -> None:
-        """Envoie un keepalive bridge si plus de 300 s sans activité."""
+        """Envoie un keepalive bridge si plus de 300 s sans activité.
+        Reconnexion proactive à 55min avant l'expiration de la session OpenAI Realtime (60min).
+        """
         t = time.monotonic()
+
+        # Reconnexion proactive 5min avant l'expiration des 60min OpenAI Realtime
+        if t - self._conv_app_start_time > 3300:  # 55 minutes
+            logger.warning("Session OpenAI Realtime proche de l'expiration (55min) — reconnexion proactive")
+            bridge._post("/reconnect", {})
+            self._conv_app_start_time = t
+
         if t - self._last_bridge_activity > 300:
             if self._last_greeted:
                 # Ré-injecte le contexte face au cas où la conv_app a redémarré
