@@ -134,6 +134,7 @@ class ReachyCare:
         # Check-in chute — état du check-in en cours
         self._fall_checkin_active: bool = False
         self._fall_checkin_time: float = 0.0
+        self._pending_impact_time: float | None = None  # timestamp impact sonore en attente de fusion
 
         # Keepalive bridge — timestamp de la dernière activité envoyée au bridge
         self._last_bridge_activity = time.monotonic()
@@ -142,6 +143,21 @@ class ReachyCare:
         self._last_memory_inject = time.monotonic()
 
         self._check_daemon()
+
+        # Protection double instance — vérifier si un autre main.py tourne déjà
+        if config.PID_FILE.exists():
+            try:
+                existing_pid = int(config.PID_FILE.read_text().strip())
+                os.kill(existing_pid, 0)  # signal 0 = vérif existence seulement
+                logger.error(
+                    "main.py déjà en cours (PID %d) — arrêt immédiat pour éviter les conflits.",
+                    existing_pid,
+                )
+                sys.exit(1)
+            except (ProcessLookupError, ValueError):
+                # PID mort ou invalide — fichier obsolète, on continue
+                logger.warning("PID_FILE obsolète — nettoyage.")
+                config.PID_FILE.unlink(missing_ok=True)
 
         with open(config.PID_FILE, "w", encoding="utf-8") as f:
             f.write(str(os.getpid()))
@@ -443,6 +459,22 @@ class ReachyCare:
             self._chess_absent_frames = 0
             self._chess_detected_frames += 1
 
+            # Pré-incliner la tête dès 3 frames pour faciliter la détection continue
+            if (
+                config.CHESS_AUTO_DETECT
+                and self._chess_detected_frames == 3
+                and self.mini
+                and self.mode_manager
+                and self.mode_manager.get_current_mode() != MODE_ECHECS
+            ):
+                try:
+                    self.mini.goto_target(
+                        head=create_head_pose(pitch=15, degrees=True),
+                        duration=1.0,
+                    )
+                except Exception:
+                    pass
+
             # --- Auto-détection → basculer en MODE_ECHECS ---
             if (
                 config.CHESS_AUTO_DETECT
@@ -546,10 +578,14 @@ class ReachyCare:
         self._chess_game_state = "human_turn"
         # Baisser la tête pour voir l'échiquier sur la table
         if self.mini:
-            self.mini.goto_target(
-                head=create_head_pose(pitch=config.HEAD_CHESS_PITCH_DEG, degrees=True),
-                duration=1.5,
-            )
+            try:
+                self.mini.goto_target(
+                    head=create_head_pose(pitch=config.HEAD_CHESS_PITCH_DEG, degrees=True),
+                    duration=1.5,
+                )
+                logger.info("Tête position échecs (pitch=%d°).", config.HEAD_CHESS_PITCH_DEG)
+            except Exception as exc:
+                logger.warning("goto_target chess pitch échoué : %s", exc)
         if self.mode_manager:
             self.mode_manager.switch_mode(MODE_ECHECS)
         level = config.CHESS_SKILL_LEVEL_INIT
@@ -669,24 +705,24 @@ class ReachyCare:
         logger.warning("Impact sonore détecté : %s (score=%.2f)", label, score)
         self._session_events.append(f"Impact sonore : {label}")
 
-        # Fusion audio + vidéo : squelette absent depuis > 2s → alerte directe, haute certitude
+        # Fusion audio + vidéo obligatoire : squelette absent depuis > 2s → check-in
+        # Un son seul ne suffit pas (chien, objet qui tombe, bruit ambiant)
         if (
             self.fall_det
             and self.fall_det._skeleton_absent_since is not None
             and time.monotonic() - self.fall_det._skeleton_absent_since > 2.0
             and not self._fall_checkin_active
         ):
-            logger.warning("Fusion audio+vidéo : impact sonore + squelette absent → alerte directe")
-            self._escalate_fall_alert()
-            return
-
-        # Impact seul → check-in prudent (peut être un objet qui tombe)
-        if not self._fall_checkin_active:
+            logger.warning("Fusion audio+vidéo : impact sonore + squelette absent → check-in")
             self._fall_checkin_active = True
             self._fall_checkin_time = time.monotonic()
             if self.mini:
                 self.mini.goto_target(antennas=config.ANTENNA_ALERT, duration=0.3)
             bridge.trigger_check_in(self._last_greeted)
+        else:
+            # Mémoriser l'impact : si le squelette disparaît dans les 5s → check-in différé
+            self._pending_impact_time = time.monotonic()
+            logger.info("Impact sonore mémorisé — surveillance squelette pendant 5s (fusion différée)")
 
     def _escalate_fall_alert(self) -> None:
         """Escalade l'alerte chute après un check-in négatif ou sans réponse."""
@@ -701,6 +737,26 @@ class ReachyCare:
 
     def _check_fall_checkin_timeout(self) -> None:
         """Escalade si le LLM n'a pas rappelé dans les 45 secondes."""
+        # Vérification fusion différée : impact récent + squelette vient de disparaître
+        if (
+            self._pending_impact_time is not None
+            and time.monotonic() - self._pending_impact_time < 5.0
+            and self.fall_det
+            and self.fall_det._skeleton_absent_since is not None
+            and not self._fall_checkin_active
+        ):
+            logger.warning("Fusion différée : squelette absent après impact sonore → check-in")
+            self._pending_impact_time = None
+            self._fall_checkin_active = True
+            self._fall_checkin_time = time.monotonic()
+            if self.mini:
+                self.mini.goto_target(antennas=config.ANTENNA_ALERT, duration=0.3)
+            bridge.trigger_check_in(self._last_greeted)
+            return
+        # Annuler si impact trop vieux (>5s)
+        if self._pending_impact_time is not None and time.monotonic() - self._pending_impact_time >= 5.0:
+            self._pending_impact_time = None
+
         if not self._fall_checkin_active:
             return
         if time.monotonic() - self._fall_checkin_time > 45:

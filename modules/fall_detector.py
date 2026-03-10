@@ -95,7 +95,7 @@ class FallDetector:
 
     def is_fallen(self, frame: np.ndarray) -> bool:
         """
-        Analyse une frame et retourne True si une chute est confirmée.
+        Analyse une frame et retourne True si une chute est confirmée (Algo B uniquement).
 
         Retourne True une seule fois par chute. Appeler reset() après avoir
         traité l'alerte pour relancer la surveillance.
@@ -113,9 +113,6 @@ class FallDetector:
         now = time.monotonic()
 
         if landmarks is None:
-            # Algorithme A — réinitialise le timer ratio
-            self._fall_start_time = None
-
             # Algorithme B — squelette disparu
             if self._skeleton_seen:
                 if self._skeleton_absent_since is None:
@@ -134,17 +131,10 @@ class FallDetector:
         # Squelette visible — mise à jour état
         self._skeleton_seen = True
         self._skeleton_absent_since = None
+        self._fall_start_time = None
 
-        # Algorithme A — ratio vertical
-        if self._check_fall_criterion(landmarks):
-            if self._fall_start_time is None:
-                self._fall_start_time = now
-            elif (now - self._fall_start_time) >= self.sustained_seconds:
-                self._alert_active = True
-                return True
-        else:
-            self._fall_start_time = None
-
+        # Algorithme A désactivé — caméra à hauteur d'yeux (~130cm),
+        # les hanches sont toujours hors cadre → ratio épaules/hanches inutilisable.
         return False
 
     def reset(self):

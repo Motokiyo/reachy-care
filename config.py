@@ -38,7 +38,7 @@ FALL_GHOST_RESET_SEC    = 45.0  # Algo B : secondes sans squelette → personne 
 # Module 1E — Sound Detection (YAMNet TFLite)
 SOUND_DETECTION_ENABLED  = True
 SOUND_MODEL_PATH         = MODELS_DIR / "yamnet.tflite"
-SOUND_IMPACT_THRESHOLD   = 0.30    # score min pour déclencher suspicion de chute
+SOUND_IMPACT_THRESHOLD   = 0.45    # score min pour déclencher suspicion de chute
 
 # Boucle principale
 FRAME_INTERVAL_SEC      = 0.1     # 10 Hz
@@ -58,9 +58,9 @@ LOCATION                = "Paris, France"   # ville pour les recherches météo
 TIMEZONE                = "Europe/Paris"    # fuseau horaire (IANA, ex: "America/New_York", "Asia/Tokyo")
 
 # Alertes Telegram (recommandé — plus simple que l'email)
-TELEGRAM_BOT_TOKEN      = ""         # token du bot créé via @BotFather
-TELEGRAM_CHAT_ID        = ""         # ton chat_id (obtenu via /start sur le bot)
-TELEGRAM_ENABLED        = False      # passer à True une fois configuré
+TELEGRAM_BOT_TOKEN      = "REDACTED_TELEGRAM_TOKEN"
+TELEGRAM_CHAT_ID        = "REDACTED_CHAT_ID"
+TELEGRAM_ENABLED        = True
 
 # Alertes email (alternatif)
 ALERT_EMAIL_TO          = ""             # adresse de destination des alertes email
@@ -89,3 +89,10 @@ WAKE_WORD_FALLBACK      = "hey_jarvis"  # modèle intégré si hey_reachy.onnx a
                                         # Autres disponibles : "alexa", "hey_mycroft", "hey_rhasspy"
 WAKE_WORD_THRESHOLD     = 0.5
 WAKE_WORD_DEVICE_INDEX  = None   # None = device par défaut (PulseAudio)
+
+# Overrides locaux (gitignored) — pour les credentials sur le Pi
+# Créer /home/pollen/reachy_care/config_local.py avec les valeurs à surcharger
+try:
+    from config_local import *  # noqa: F401,F403
+except ImportError:
+    pass
