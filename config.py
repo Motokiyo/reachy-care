@@ -58,7 +58,7 @@ TELEGRAM_CHAT_ID        = ""         # ton chat_id (obtenu via /start sur le bot
 TELEGRAM_ENABLED        = False      # passer à True une fois configuré
 
 # Alertes email (alternatif)
-ALERT_EMAIL_TO          = "motokiyoferran@gmail.com"
+ALERT_EMAIL_TO          = ""             # adresse de destination des alertes email
 ALERT_EMAIL_FROM        = ""         # ex: "reachy.alerts@gmail.com"
 ALERT_EMAIL_PASSWORD    = ""         # mot de passe d'application Gmail
 ALERT_EMAIL_ENABLED     = False      # passer à True une fois les identifiants configurés
